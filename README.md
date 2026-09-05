@@ -1,5 +1,8 @@
 # Resend Mail
 
+update email 
+
+
 A mobile-first inbox and sending dashboard for a [Resend](https://resend.com) account, built with Next.js 16, Tailwind 4 and shadcn/ui (Base UI).
 
 ## Run it
