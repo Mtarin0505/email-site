@@ -23,14 +23,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { previewDocument } from "@/lib/signature-html";
 
 type Sender = { label: string; email: string };
 
+/** The message being replied to or forwarded, sent below the signature. */
+export type Quoted = {
+  style: "reply" | "forward";
+  intro: string;
+  text: string;
+};
+
 type Props = {
   senders: Sender[];
-  initial: { to: string; subject: string; body: string };
+  initial: { to: string; subject: string };
+  quoted: Quoted | null;
+  /** Rendered signature for the signed-in user, or null when none is set. */
+  signatureHtml: string | null;
   mode: "new" | "reply" | "forward";
 };
 
@@ -42,11 +54,12 @@ const TITLE = {
   forward: "Forward",
 } as const;
 
-export function ComposeForm({ senders, initial, mode }: Props) {
+export function ComposeForm({ senders, initial, quoted, signatureHtml, mode }: Props) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(sendEmail, initialState);
   const [from, setFrom] = useState(senders[0]?.email ?? "");
   const [showCcBcc, setShowCcBcc] = useState(false);
+  const [includeSignature, setIncludeSignature] = useState(Boolean(signatureHtml));
   const ids = {
     from: useId(),
     to: useId(),
@@ -54,6 +67,7 @@ export function ComposeForm({ senders, initial, mode }: Props) {
     bcc: useId(),
     subject: useId(),
     body: useId(),
+    signature: useId(),
   };
   const errors = state.fieldErrors ?? {};
 
@@ -247,7 +261,6 @@ export function ComposeForm({ senders, initial, mode }: Props) {
                 <Textarea
                   id={ids.body}
                   name="body"
-                  defaultValue={initial.body}
                   aria-invalid={errors.body ? true : undefined}
                   placeholder="Write your message"
                   autoFocus={mode === "reply"}
@@ -256,10 +269,65 @@ export function ComposeForm({ senders, initial, mode }: Props) {
                 {errors.body && <FieldError>{errors.body}</FieldError>}
               </Field>
             </FieldGroup>
+
+            {signatureHtml ? (
+              <div className="flex flex-col gap-3 border-t px-4 py-3">
+                <input type="hidden" name="includeSignature" value={includeSignature ? "on" : ""} />
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id={ids.signature}
+                    checked={includeSignature}
+                    onCheckedChange={setIncludeSignature}
+                  />
+                  <label htmlFor={ids.signature} className="text-sm">
+                    Include signature
+                  </label>
+                  <Link
+                    href="/settings"
+                    className="ml-auto text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Edit
+                  </Link>
+                </div>
+                {includeSignature && (
+                  <iframe
+                    title="Signature preview"
+                    srcDoc={previewDocument(signatureHtml)}
+                    sandbox=""
+                    referrerPolicy="no-referrer"
+                    className="h-56 w-full rounded-md border bg-white"
+                  />
+                )}
+              </div>
+            ) : (
+              <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+                No signature yet.{" "}
+                <Link href="/settings" className="underline underline-offset-4 hover:text-foreground">
+                  Add one in Settings
+                </Link>
+                .
+              </p>
+            )}
+
+            {quoted && (
+              <details className="border-t px-4 py-3">
+                <input type="hidden" name="quoteStyle" value={quoted.style} />
+                <input type="hidden" name="quoteIntro" value={quoted.intro} />
+                <input type="hidden" name="quoteText" value={quoted.text} />
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                  {quoted.style === "reply" ? "Quoted message included" : "Forwarded message included"}
+                </summary>
+                <div className="mt-3 border-l-2 pl-3 text-sm leading-[1.6] whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
+                  {quoted.intro}
+                  {"\n\n"}
+                  {quoted.text}
+                </div>
+              </details>
+            )}
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Sent as plain text through Resend from the address selected above.
+            Sent through Resend as formatted HTML with a plain-text copy, from the address selected above.
           </p>
         </div>
       </div>

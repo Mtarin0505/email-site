@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
-import { ComposeForm } from "@/components/compose/compose-form";
+import { cookies } from "next/headers";
+import { ComposeForm, type Quoted } from "@/components/compose/compose-form";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { getEmail, listSenderAddresses } from "@/lib/data";
 import { formatAddress, formatFullTime } from "@/lib/format";
+import { getSignature } from "@/lib/signature";
+import { renderSignatureHtml } from "@/lib/signature-html";
 
 export const metadata: Metadata = { title: "New message" };
 
@@ -10,12 +14,18 @@ export default async function ComposePage({ searchParams }: PageProps<"/compose"
   const replyId = typeof sp.reply === "string" ? sp.reply : undefined;
   const forwardId = typeof sp.forward === "string" ? sp.forward : undefined;
 
-  const [senders, source] = await Promise.all([
+  const store = await cookies();
+  const session = await verifySessionToken(store.get(SESSION_COOKIE)?.value);
+
+  const [senders, source, signature] = await Promise.all([
     listSenderAddresses(),
     replyId || forwardId ? getEmail((replyId ?? forwardId) as string) : null,
+    // A missing signature should never block writing a message.
+    session ? getSignature(session.u).catch(() => null) : null,
   ]);
 
-  let initial = { to: "", subject: "", body: "" };
+  let initial = { to: "", subject: "" };
+  let quoted: Quoted | null = null;
   let mode: "new" | "reply" | "forward" = "new";
 
   if (source && replyId) {
@@ -24,23 +34,32 @@ export default async function ComposePage({ searchParams }: PageProps<"/compose"
     initial = {
       to: replyTarget.email,
       subject: source.subject.startsWith("Re:") ? source.subject : `Re: ${source.subject}`,
-      body: `\n\nOn ${formatFullTime(source.createdAt)}, ${formatAddress(source.from)} wrote:\n\n${quote(source.text)}`,
+    };
+    quoted = {
+      style: "reply",
+      intro: `On ${formatFullTime(source.createdAt)}, ${formatAddress(source.from)} wrote:`,
+      text: source.text,
     };
   } else if (source && forwardId) {
     mode = "forward";
     initial = {
       to: "",
       subject: source.subject.startsWith("Fwd:") ? source.subject : `Fwd: ${source.subject}`,
-      body: `\n\n---------- Forwarded message ----------\nFrom: ${formatAddress(source.from)}\nDate: ${formatFullTime(source.createdAt)}\nSubject: ${source.subject}\nTo: ${source.to.map(formatAddress).join(", ")}\n\n${source.text}`,
+    };
+    quoted = {
+      style: "forward",
+      intro: `---------- Forwarded message ----------\nFrom: ${formatAddress(source.from)}\nDate: ${formatFullTime(source.createdAt)}\nSubject: ${source.subject}\nTo: ${source.to.map(formatAddress).join(", ")}`,
+      text: source.text,
     };
   }
 
-  return <ComposeForm senders={senders} initial={initial} mode={mode} />;
-}
-
-function quote(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n");
+  return (
+    <ComposeForm
+      senders={senders}
+      initial={initial}
+      quoted={quoted}
+      signatureHtml={signature ? renderSignatureHtml(signature) : null}
+      mode={mode}
+    />
+  );
 }

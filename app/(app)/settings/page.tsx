@@ -3,9 +3,12 @@ import { cookies } from "next/headers";
 import { KeyIcon, ShieldCheckIcon, UserCircleIcon } from "@phosphor-icons/react/ssr";
 import { PageHeader } from "@/components/app/page-header";
 import { SignOutButton } from "@/components/app/sign-out-button";
+import { SignatureForm } from "@/components/settings/signature-form";
 import { Badge } from "@/components/ui/badge";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { dataSource } from "@/lib/data";
+import { getSignature } from "@/lib/signature";
+import { EMPTY_SIGNATURE, type SignatureFields } from "@/lib/signature-html";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -41,11 +44,21 @@ export default async function SettingsPage() {
   const session = await verifySessionToken(store.get(SESSION_COOKIE)?.value);
   const hasApiKey = dataSource() === "resend";
 
+  let signature: SignatureFields = EMPTY_SIGNATURE;
+  let signatureError: string | null = null;
+  if (session) {
+    try {
+      signature = (await getSignature(session.u)) ?? EMPTY_SIGNATURE;
+    } catch (err) {
+      signatureError = err instanceof Error ? err.message : "Could not load signature.";
+    }
+  }
+
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
       <PageHeader
         title="Settings"
-        description="Account access and the Resend connection for this dashboard."
+        description="Account access, your email signature and the Resend connection."
       />
       <div className="scroll-owner">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 lg:p-6">
@@ -69,6 +82,24 @@ export default async function SettingsPage() {
                 <SignOutButton />
               </SettingRow>
             </div>
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <h2 className="px-1 text-[0.6875rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+              Email
+            </h2>
+            <div className="rounded-lg border bg-card">
+              {signatureError ? (
+                <p className="px-4 py-4 text-sm text-destructive lg:px-5">{signatureError}</p>
+              ) : (
+                <SignatureForm initial={signature} />
+              )}
+            </div>
+            <p className="px-1 text-xs text-muted-foreground">
+              {hasApiKey
+                ? "Stored in your Resend account as a template, so changes apply right away without a redeploy."
+                : "RESEND_API_KEY is not set, so the signature is kept in memory and resets when the server restarts."}
+            </p>
           </section>
 
           <section className="flex flex-col gap-2">

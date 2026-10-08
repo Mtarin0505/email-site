@@ -30,6 +30,7 @@ Open http://localhost:3000 and sign in with the credentials from `.env` (default
 - `lib/auth.ts` signs and verifies sessions with Web Crypto, so it runs in Node and Edge.
 - `lib/data/` is the data layer. `index.ts` picks `resend.ts` (live API) when `RESEND_API_KEY` is set, otherwise the sample data in `mock.ts`.
 - `app/(app)/` holds the authenticated screens: Inbox, Sent, Compose, Domains, Settings.
+- `lib/signature.ts` stores each user's email signature (edited in Settings) as a Resend template aliased `dashboard-signature-<username>`, so it changes without a redeploy. `lib/signature-html.ts` renders it as email-safe HTML and plain text. Outgoing mail is sent as HTML with a plain-text copy: message, then signature, then any quoted reply or forward.
 - `components/mail/` holds the list-detail shell, rows, status chips and the message view.
 
 ## Notes on live data
